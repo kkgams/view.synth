@@ -23,8 +23,8 @@ Requires Make, Node.js 24, Python 3, curl, zip, unzip and tar; no package instal
 
 Edit `src/vendor/pl_synth.js`, `src/model.mjs` and `src/views/view-synth.js`. Make concatenates them in that order, stripping model `export ` prefixes. Only the Host helper remains imported. The Project loads the assembled module, not source files individually.
 
-First launch downloads the Host through its latest-release API and resolves pinned supporting Units. Existing tools are not updated implicitly; downloaded Host notices remain beside the app. Launch sets `GAMS_APP_CWD` and selects local `gams.json`. Clean refuses tracked output, symlinks and unidentified tools/caches.
+First launch downloads pinned GAMS v3.2.0 and resolves pinned supporting Units. Existing tools are not updated implicitly; downloaded Host notices remain beside the app. Launch sets `GAMS_APP_CWD` and selects local `gams.json`. Clean refuses tracked output, symlinks and unidentified tools/caches.
 
-**Native Host interaction is not verified.** The current `$file` configuration contract requires a compatible Host; the latest published download may predate that contract.
+Requires GAMS v3.2.0 or newer for the `$file` Project configuration. Local launch, note editing, editor tabs and preview playback were checked in the released macOS Host. File import/download gestures and other platforms remain unverified.
 
 [Usage and song format](docs/index.md).

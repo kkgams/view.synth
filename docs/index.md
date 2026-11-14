@@ -36,7 +36,7 @@ Run `make test check` for model tests and assembled JavaScript syntax. `make ope
 
 `make serve-docs` previews this wiki on independent `DOCS_PORT=8080`; `make validate-docs` validates it and `make docs` builds `build.nosync/site/`. `make clean` removes named generated outputs and identified downloads, refusing tracked files, symlinks and unidentified tools/caches. Supplied tools and unknown caches are preserved.
 
-Native Host interaction is not verified. This Project uses the current `$file` contract and needs a compatible Host; the latest published Host may not support it yet.
+Requires GAMS v3.2.0 or newer for `$file` configuration. Local launch, note editing, editor tabs and preview playback were checked with the released macOS Host. File import/download gestures and other platforms remain unverified.
 
 ## Attribution
 
