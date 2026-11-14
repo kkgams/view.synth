@@ -1,0 +1,10 @@
+view.synth
+Copyright 2026 GAMS contributors
+
+Includes PL_SYNTH by Dominic Szablewski (https://phoboslab.org), MIT licensed.
+Source: https://github.com/justgook/pl_synth
+Pinned commit: 03bf74cb6f953e6ecc2f527bc40f6b7d759bc670
+src/vendor/pl_synth.js is the unmodified vanilla JavaScript engine.
+Instrument presets and parameter ordering are adapted from tracker.html.
+Original engine attribution to Sonant (Jake Taylor / Ferris / Youth Uprising)
+is preserved in its source header. See licenses/pl_synth-MIT.txt.

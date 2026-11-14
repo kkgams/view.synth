@@ -1,0 +1,82 @@
+{
+  "plugins": [
+    {
+      "$file": "https://github.com/kkgams/plugin.fs/releases/download/v0.2.3/plugin.fs.wasm"
+    },
+    {
+      "$file": "https://github.com/kkgams/plugin.layout/releases/download/v0.2.3/plugin.layout.wasm"
+    }
+  ],
+  "ui": {
+    "keys": [],
+    "theme": {
+      "url": {
+        "$file": {
+          "url": "https://github.com/kkgams/theme.gams/releases/download/v1.0.2/theme.gams.zip",
+          "entry": "themes/the98.css"
+        }
+      }
+    },
+    "services": {
+      "ui-context": {
+        "url": {
+          "$file": {
+            "url": "https://github.com/kkgams/ui-service.context/releases/download/v0.2.3/ui-service.context.zip",
+            "entry": "ui-plugins/context.js"
+          }
+        }
+      },
+      "ui-keys": {
+        "url": {
+          "$file": {
+            "url": "https://github.com/kkgams/ui-service.keys/releases/download/v0.2.2/ui-service.keys.zip",
+            "entry": "ui-plugins/keys.js"
+          }
+        }
+      },
+      "ui-toast": {
+        "url": {
+          "$file": {
+            "url": "https://github.com/kkgams/ui-service.toast/releases/download/v0.2.2/ui-service.toast.zip",
+            "entry": "ui-plugins/toast.js"
+          }
+        }
+      },
+      "ui-popup": {
+        "url": {
+          "$file": {
+            "url": "https://github.com/kkgams/ui-service.popup/releases/download/v0.2.2/ui-service.popup.zip",
+            "entry": "ui-plugins/popup.js"
+          }
+        }
+      },
+      "ui-tooltip": {
+        "url": {
+          "$file": {
+            "url": "https://github.com/kkgams/ui-service.tooltip/releases/download/v0.2.2/ui-service.tooltip.zip",
+            "entry": "ui-plugins/tooltip.js"
+          }
+        }
+      },
+      "ui-layout": {
+        "url": {
+          "$file": {
+            "url": "https://github.com/kkgams/ui-service.layout/releases/download/v0.2.2/ui-service.layout.zip",
+            "entry": "ui-plugins/layout.js"
+          }
+        },
+        "config": {
+          "layout": "<view-synth />"
+        }
+      }
+    },
+    "views": {
+      "view-synth": {
+        "url": "build.nosync/views/view-synth.js",
+        "label": "Synth",
+        "group": "Project",
+        "internal": false
+      }
+    }
+  }
+}
