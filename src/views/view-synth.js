@@ -8,25 +8,51 @@ export class ViewSynth extends HTMLElement {
         this.song = createSong()
         this.track = 0
         this.pattern = 0
-        this.tab = 'pattern'
+        this.row = 0
+        this.rowAnchor = 0
+        this.step = 0
+        this.pianoOctave = 4
+        this.pianoFocus = 0
+        this.previewNote = null
         this.audio = null
         this.source = null
+        this.playback = null
+        this.playbackFrame = null
         this.paused = false
         this.playMode = 'song'
         this.busy = false
         this.generation = 0
-        this.statusText = 'Enter notes such as C5 or F#4. Export JSON to keep your work.'
+        this.statusText = 'Select pattern rows, then press a piano key to write a note. Export JSON to keep your work.'
     }
 
     connectedCallback() {
         this.style.display = 'contents'
         this.onClick = event => {
-            const button = event.target.closest('button[data-action]')
+            const button = event.target.closest('button[data-action], g[role="button"][data-action]')
             if (button) void this.perform(() => this.action(button.dataset.action, button))
+            else {
+                const header = event.target.closest('th[data-track], th[data-action="pattern"]')
+                if (header && !this.busy) {
+                    this.selectHeader(header)
+                    return
+                }
+                const row = event.target.closest('tr[data-pattern][data-row]')
+                if (row && !this.busy) this.selectPatternRow(row, true, event.shiftKey)
+                const sequence = event.target.closest('tr[data-step]')
+                if (sequence && !this.busy) {
+                    const cell = event.target.closest('td[data-sequence-track]')
+                    this.selectSequenceRow(sequence, cell ? Number(cell.dataset.sequenceTrack) : this.track, true)
+                }
+            }
         }
         this.onChange = event => void this.perform(() => this.change(event.target))
         this.onSubmit = event => event.preventDefault()
-        this.onKey = event => this.navigateNotes(event)
+        this.onKey = event => {
+            this.navigateHeaders(event)
+            this.navigateSequence(event)
+            this.navigateNotes(event)
+            this.navigatePiano(event)
+        }
         this.render()
         this.addEventListener('click', this.onClick)
         this.addEventListener('change', this.onChange)
@@ -81,14 +107,22 @@ export class ViewSynth extends HTMLElement {
                 <label>BPM <input type="number" data-field="bpm" min="40" max="661" step="1" required ${SYNTH_TEXT}></label>
             </div>
             <form aria-label="Synth tracker">
-                <fieldset><legend>Editor</legend>
-                    <label>Track <select data-field="track">${Array.from({length: 8}, (_, i) => `<option value="${i}">Track ${i + 1}</option>`).join('')}</select></label>
-                    <label>Pattern <select data-field="pattern">${Array.from({length: 9}, (_, i) => `<option value="${i}">${i + 1}</option>`).join('')}</select></label>
-                </fieldset>
-                <div role="tablist" aria-label="Synth editors">
-                    ${['pattern', 'instrument', 'song'].map(tab => `<button type="button" role="tab" data-action="tab" data-tab="${tab}" aria-selected="${this.tab === tab}">${tab[0].toUpperCase() + tab.slice(1)}</button>`).join('')}
-                </div>
-                <fieldset role="tabpanel" data-element="editor"></fieldset>
+                <table data-layout="separate" aria-label="Synth workspace">
+                    <thead><tr><th scope="col">Sequencer</th><td><div role="buttongroup">
+                        <button type="button" data-action="add-step" aria-label="Add sequence step"><i aria-hidden="true">add</i></button>
+                        <button type="button" data-action="remove-step" aria-label="Remove last sequence step"><i aria-hidden="true">remove</i></button>
+                    </div></td><th colspan="8" scope="col" data-element="track-name"></th></tr></thead>
+                    <tbody><tr>
+                        <td colspan="2" rowspan="3">
+                            <table data-element="sequencer" aria-label="Song sequence"></table>
+                        </td>
+                        <td colspan="8">
+                            <table data-layout="separate" data-element="patterns" aria-label="Track patterns"></table>
+                        </td>
+                    </tr>
+                    <tr><td colspan="8"><table data-layout="separate" data-element="instrument" aria-label="Track instrument"></table></td></tr>
+                    <tr><td colspan="8"><svg data-element="piano" role="group" aria-label="Instrument preview keyboard" viewBox="0 0 672 104" width="100%" height="104" preserveAspectRatio="none"></svg></td></tr>
+                </tbody></table>
             </form>
             <footer><output data-element="status" aria-live="polite"></output></footer>`
         // Area header slots accept direct children, not descendants of the View.
@@ -97,8 +131,6 @@ export class ViewSynth extends HTMLElement {
         this.header.addEventListener('click', this.onClick)
         this.header.addEventListener('change', this.onChange)
         this.parentElement.append(this.header)
-        this.control('[data-field="track"]').value = String(this.track)
-        this.control('[data-field="pattern"]').value = String(this.pattern)
         this.header.querySelector('[data-field="bpm"]').value = String(Math.round(60 * 44100 / 4 / this.song[0]))
         this.header.querySelector('[data-field="play-mode"]').value = this.playMode
         this.updateTransport()
@@ -107,39 +139,185 @@ export class ViewSynth extends HTMLElement {
     }
 
     renderEditor() {
-        const editor = this.control('[data-element="editor"]')
-        editor.setAttribute('aria-label', `${this.tab} editor`)
-        if (this.tab === 'pattern') {
-            editor.innerHTML = `<legend>Track ${this.track + 1}, pattern ${this.pattern + 1}</legend>
-                <button type="button" data-action="clear">Clear pattern</button>
-                <table><caption>32 rows; empty notes are silent. Enter or arrow keys move between rows.</caption>
-                    <thead><tr><th scope="col">Row</th><th scope="col">Note</th><th scope="col">Preview</th></tr></thead>
-                    <tbody>${this.song[1][this.track][2][this.pattern].map((note, row) => `<tr>
-                        <th scope="row">${String(row + 1).padStart(2, '0')}</th>
-                        <td><input type="text" data-row="${row}" value="${noteName(note)}" aria-label="Row ${row + 1} note" ${SYNTH_TEXT}></td>
-                        <td><button type="button" data-action="row" data-row="${row}" aria-label="Preview row ${row + 1}">Play</button></td>
-                    </tr>`).join('')}</tbody></table>`
-        } else if (this.tab === 'instrument') {
-            editor.innerHTML = `<legend>Track ${this.track + 1} instrument</legend>
-                <label>Preset <select data-field="preset"><option value="">Choose preset</option>${Object.keys(PRESETS).map(name => `<option>${name}</option>`).join('')}</select></label>
-                <label>Preview note <input type="text" data-field="preview" value="C5" ${SYNTH_TEXT}></label>
-                <button type="button" data-action="note">Preview instrument</button>
-                ${['Oscillator 1', 'Oscillator 2', 'Envelope', 'Effects', 'LFO'].map(group => `<fieldset><legend>${group}</legend>${FIELDS.map(([section, name, max, options], index) => {
-                    if (section !== group) return ''
-                    const value = this.song[1][this.track][0][index]
-                    const attributes = `data-instrument="${index}" aria-label="${group}: ${name}"`
-                    const input = options ? `<select ${attributes}>${options.map((label, i) => `<option value="${i}" ${i === value ? 'selected' : ''}>${label}</option>`).join('')}</select>`
-                        : max === 1 ? `<input type="checkbox" ${attributes} ${value ? 'checked' : ''}>`
-                        : `<input type="number" ${attributes} value="${value}" min="0" max="${max}" step="1" required ${SYNTH_TEXT}>`
-                    return `<label>${name} ${input}</label>`
-                }).join('')}</fieldset>`).join('')}`
-        } else if (this.tab === 'song') {
-            editor.innerHTML = `<legend>Song sequence</legend><table>
-                <caption>Pattern numbers 1–9 separated by spaces; 0 is a silent pattern. Up to 64 steps per track.</caption>
-                <thead><tr><th scope="col">Track</th><th scope="col">Sequence</th></tr></thead>
-                <tbody>${this.song[1].map((track, i) => `<tr><th scope="row">${i + 1}</th><td><textarea data-sequence="${i}" aria-label="Track ${i + 1} sequence" ${SYNTH_TEXT}>${track[1].join(' ')}</textarea></td></tr>`).join('')}</tbody>
-                </table>`
-        } else throw new Error(`Unknown editor tab: ${this.tab}`)
+        this.renderSequence()
+        this.renderPatterns()
+        this.renderInstrument()
+        this.renderPiano()
+        this.updateSelection()
+    }
+
+    sequenceSteps() {
+        return Math.max(1, ...this.song[1].map(track => track[1].length))
+    }
+
+    renderSequence() {
+        const steps = this.sequenceSteps()
+        this.step = Math.min(this.step, steps - 1)
+        this.control('[data-element="sequencer"]').innerHTML = `
+            <colgroup><col>${this.song[1].map((_, track) => `<col data-track="${track}" aria-selected="${track === this.track}">`).join('')}</colgroup>
+            <thead><tr><th scope="col">#</th>${this.song[1].map((_, track) => `<th scope="col" role="button" data-track="${track}" aria-pressed="${track === this.track}" tabindex="${track === this.track ? 0 : -1}" aria-label="Select track ${track + 1}">${track + 1}</th>`).join('')}</tr></thead>
+            <tbody>${Array.from({length: steps}, (_, step) => `<tr data-step="${step}" aria-selected="${step === this.step}" tabindex="${step === this.step ? 0 : -1}" aria-label="Sequence step ${step + 1}"><th scope="row">${step + 1}</th>${this.song[1].map((track, index) => `<td data-sequence-track="${index}">${track[1][step] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>`
+        this.control('[data-action="add-step"]').disabled = steps === 64
+        this.control('[data-action="remove-step"]').disabled = this.song[1].every(track => !track[1].length)
+    }
+
+    renderPatterns() {
+        const patterns = this.song[1][this.track][2]
+        this.control('[data-element="patterns"]').innerHTML = `<tbody><tr>${patterns.map((notes, pattern) => `<td>
+            <table aria-label="Track ${this.track + 1}, pattern ${pattern + 1}">
+                <thead><tr><th colspan="2" scope="col" role="button" data-action="pattern" data-pattern="${pattern}" aria-pressed="${pattern === this.pattern}" tabindex="${pattern === this.pattern ? 0 : -1}" aria-label="Select pattern ${pattern + 1}">Pattern ${pattern + 1}</th></tr></thead>
+                <tbody>${notes.map((note, row) => {
+                    const selected = pattern === this.pattern && row >= Math.min(this.rowAnchor, this.row) && row <= Math.max(this.rowAnchor, this.row)
+                    const active = pattern === this.pattern && row === this.row
+                    return `<tr data-pattern="${pattern}" data-row="${row}" aria-selected="${selected}" tabindex="${active ? 0 : -1}" aria-label="Pattern ${pattern + 1}, row ${row + 1}: ${note ? noteName(note) : 'empty'}">
+                        <th scope="row">${String(row + 1).padStart(2, '0')}</th><td>${noteName(note)}</td>
+                    </tr>`
+                }).join('')}</tbody>
+            </table>
+        </td>`).join('')}</tr></tbody>`
+    }
+
+    instrumentGroup(group, title = group) {
+        return `<table><thead><tr><th colspan="2" scope="col">${title}</th></tr></thead><tbody>${FIELDS.map(([section, name, max, options], index) => {
+            if (section !== group) return ''
+            const value = this.song[1][this.track][0][index]
+            const attributes = `data-instrument="${index}" aria-label="${group}: ${name}"`
+            const input = options ? `<select ${attributes}>${options.map((label, i) => `<option value="${i}" ${i === value ? 'selected' : ''}>${label}</option>`).join('')}</select>`
+                : max === 1 ? `<input type="checkbox" ${attributes} ${value ? 'checked' : ''}>`
+                : `<input type="range" ${attributes} value="${value}" min="0" max="${max}" step="1">`
+            return `<tr><th scope="row">${name}</th><td>${input}</td></tr>`
+        }).join('')}</tbody></table>`
+    }
+
+    renderInstrument() {
+        this.control('[data-element="instrument"]').innerHTML = `<tbody><tr>
+            <td>${this.instrumentGroup('Oscillator 1', 'OSC 1')}${this.instrumentGroup('Oscillator 2', 'OSC 2')}</td>
+            <td>${this.instrumentGroup('Envelope', 'ENV')}${this.instrumentGroup('LFO')}</td>
+            <td>${this.instrumentGroup('Effects', 'FX')}
+                <table><thead><tr><th colspan="2" scope="col">Preset</th></tr></thead><tbody>
+                    <tr><td colspan="2"><select data-field="preset" aria-label="Instrument preset"><option value="">Choose preset</option>${Object.keys(PRESETS).map(name => `<option>${name}</option>`).join('')}</select></td></tr>
+                </tbody></table>
+            </td>
+        </tr></tbody>`
+    }
+
+    renderPiano() {
+        const first = parseNote(`C${this.pianoOctave}`)
+        let white = 0
+        const keys = Array.from({length: 36}, (_, index) => {
+            const note = first + index
+            const black = [1, 3, 6, 8, 10].includes(index % 12)
+            const x = black ? 40 + white * 30 - 9 : 40 + white++ * 30
+            const label = noteName(note)
+            return {black, html: `<g role="button" data-action="piano-note" data-note="${note}" tabindex="${index === this.pianoFocus ? 0 : -1}" aria-label="Write ${label} and preview" aria-pressed="false">
+                <rect x="${x}" y="2" width="${black ? 18 : 30}" height="${black ? 60 : 100}" rx="1" fill="${black ? '#222' : '#eee'}" stroke="#555"/>
+                <text x="${x + (black ? 9 : 15)}" y="${black ? 51 : 92}" text-anchor="middle" font-size="${black ? 8 : 10}" fill="${black ? '#eee' : '#222'}" pointer-events="none" aria-hidden="true">${label}</text>
+            </g>`}
+        })
+        const controls = [1, -1].map(offset => {
+            const disabled = this.pianoOctave + offset < 0 || this.pianoOctave + offset > 7
+            const y = offset === 1 ? 2 : 72
+            return `<g role="button" data-action="piano-octave" data-offset="${offset}" tabindex="${disabled ? -1 : 0}" aria-label="Octave ${offset === 1 ? 'up' : 'down'}" aria-disabled="${disabled}" opacity="${disabled ? 0.35 : 1}">
+                <rect x="2" y="${y}" width="32" height="30" fill="var(--surface)" stroke="currentColor"/>
+                <path d="${offset === 1 ? 'M 10 22 L 18 12 L 26 22 Z' : 'M 10 82 L 18 92 L 26 82 Z'}" fill="currentColor" pointer-events="none"/>
+            </g>`
+        }).join('')
+        this.control('[data-element="piano"]').innerHTML = `${controls}<text x="18" y="57" text-anchor="middle" font-size="16" fill="currentColor" aria-label="Starting octave ${this.pianoOctave}">${this.pianoOctave}</text>${keys.filter(key => !key.black).map(key => key.html).join('')}${keys.filter(key => key.black).map(key => key.html).join('')}`
+        this.updatePiano()
+    }
+
+    updatePiano() {
+        const first = parseNote(`C${this.pianoOctave}`)
+        this.querySelectorAll('g[data-action="piano-note"]').forEach(key => {
+            const note = Number(key.dataset.note)
+            const pressed = Boolean(this.source) && !this.paused && this.previewNote === note
+            const black = [1, 3, 6, 8, 10].includes((note - first) % 12)
+            key.setAttribute('aria-pressed', String(pressed))
+            key.setAttribute('tabindex', note - first === this.pianoFocus ? '0' : '-1')
+            key.querySelector('rect').setAttribute('fill', pressed ? (black ? '#b56b16' : '#ffc66d') : black ? '#222' : '#eee')
+        })
+    }
+
+    navigatePiano(event) {
+        const current = event.target.closest('g[role="button"][data-action]')
+        if (!current || this.busy || event.altKey || event.ctrlKey || event.metaKey) return
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!event.repeat) void this.perform(() => this.action(current.dataset.action, current))
+        } else if (current.dataset.action === 'piano-note' && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            event.stopPropagation()
+            const index = Number(current.dataset.note) - parseNote(`C${this.pianoOctave}`)
+            this.pianoFocus = event.key === 'Home' ? 0 : event.key === 'End' ? 35 : Math.max(0, Math.min(35, index + (event.key === 'ArrowLeft' ? -1 : 1)))
+            this.updatePiano()
+            this.control(`g[data-note="${parseNote(`C${this.pianoOctave}`) + this.pianoFocus}"]`).focus()
+        }
+    }
+
+    updateSelection() {
+        this.updatePiano()
+        const position = this.playbackPosition()
+        const step = position ? position.step : this.step
+        const pattern = position ? position.pattern : this.pattern
+        const firstRow = position ? position.row : Math.min(this.rowAnchor, this.row)
+        const lastRow = position ? position.row : Math.max(this.rowAnchor, this.row)
+        this.control('[data-element="track-name"]').textContent = `Track ${this.track + 1}`
+        this.querySelectorAll('col[data-track], th[data-track]').forEach(element => {
+            const selected = Number(element.dataset.track) === this.track
+            element.setAttribute(element.tagName === 'TH' ? 'aria-pressed' : 'aria-selected', String(selected))
+            if (element.tagName === 'TH') element.tabIndex = selected ? 0 : -1
+        })
+        this.querySelectorAll('th[data-action="pattern"]').forEach(header => {
+            const pressed = Number(header.dataset.pattern) === this.pattern
+            header.setAttribute('aria-pressed', String(pressed))
+            header.tabIndex = pressed ? 0 : -1
+        })
+        this.querySelectorAll('tr[data-step]').forEach(row => {
+            row.setAttribute('aria-selected', String(Number(row.dataset.step) === step))
+            // Playback changes the highlight, not the user's keyboard destination.
+            row.tabIndex = Number(row.dataset.step) === this.step ? 0 : -1
+        })
+        this.querySelectorAll('tr[data-pattern][data-row]').forEach(row => {
+            const selected = Number(row.dataset.pattern) === pattern && Number(row.dataset.row) >= firstRow && Number(row.dataset.row) <= lastRow
+            row.setAttribute('aria-selected', String(selected))
+            row.tabIndex = Number(row.dataset.pattern) === this.pattern && Number(row.dataset.row) === this.row ? 0 : -1
+        })
+    }
+
+    selectTrack(track) {
+        if (track === this.track) return
+        this.track = track
+        this.rowAnchor = this.row
+        this.renderPatterns()
+        this.renderInstrument()
+        this.updateSelection()
+    }
+
+    selectSequenceRow(row, track = this.track, focus = false) {
+        this.step = Number(row.dataset.step)
+        this.selectTrack(track)
+        const pattern = this.song[1][this.track][1][this.step]
+        if (pattern) this.setPattern(pattern - 1)
+        this.updateSelection()
+        if (focus) row.focus()
+    }
+
+    setPattern(pattern) {
+        if (pattern === this.pattern) return
+        this.pattern = pattern
+        this.rowAnchor = this.row
+    }
+
+    selectPatternRow(row, focus = false, extend = false) {
+        const pattern = Number(row.dataset.pattern)
+        const index = Number(row.dataset.row)
+        // Ranges belong to one pattern; Shift into another starts a new range.
+        if (!extend || pattern !== this.pattern) this.rowAnchor = index
+        this.pattern = pattern
+        this.row = index
+        this.updateSelection()
+        if (focus) row.focus()
     }
 
     status(text, error = false) {
@@ -168,23 +346,13 @@ export class ViewSynth extends HTMLElement {
             input.setCustomValidity('')
         }
         try {
-            if (input.matches('[data-row]')) {
-                const note = parseNote(input.value)
-                this.song[1][this.track][2][this.pattern][Number(input.dataset.row)] = note
-                input.value = noteName(note)
-            } else if (input.matches('[data-instrument]')) {
+            if (input.matches('[data-instrument]')) {
                 const index = Number(input.dataset.instrument)
                 const value = input.type === 'checkbox' ? Number(input.checked) : Number(input.value)
                 if (input.value === '' && input.type !== 'checkbox') throw new Error('Instrument values cannot be empty')
                 const instrument = [...this.song[1][this.track][0]]
                 instrument[index] = value
                 this.song[1][this.track][0] = normalizeInstrument(instrument)
-            } else if (input.matches('[data-sequence]')) {
-                this.song[1][Number(input.dataset.sequence)][1] = parseSequence(input.value)
-            } else if (input.dataset.field === 'track' || input.dataset.field === 'pattern') {
-                this[input.dataset.field] = Number(input.value)
-                this.renderEditor()
-                return
             } else if (input.dataset.field === 'play-mode') {
                 if (!['song', 'pattern'].includes(input.value)) throw new Error('Unknown playback mode')
                 this.playMode = input.value
@@ -198,7 +366,7 @@ export class ViewSynth extends HTMLElement {
             } else if (input.dataset.field === 'preset' && input.value) {
                 if (!Object.hasOwn(PRESETS, input.value)) throw new Error('Unknown instrument preset')
                 this.song[1][this.track][0] = normalizeInstrument(PRESETS[input.value])
-                this.renderEditor()
+                this.renderInstrument()
             } else return
             this.stop()
             this.status('Edited. Export JSON to keep your work.')
@@ -208,17 +376,110 @@ export class ViewSynth extends HTMLElement {
         }
     }
 
-    navigateNotes(event) {
-        if (!event.target.matches('input[data-row]') || !['Enter', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+    selectHeader(header) {
+        if (header.getAttribute('aria-disabled') === 'true') return
+        if (header.dataset.track !== undefined) this.selectTrack(Number(header.dataset.track))
+        else if (header.dataset.action === 'pattern') {
+            this.setPattern(Number(header.dataset.pattern))
+            this.updateSelection()
+        } else throw new Error('Unknown synth header selector')
+        header.focus()
+    }
+
+    navigateHeaders(event) {
+        const current = event.target.closest('th[data-track], th[data-action="pattern"]')
+        if (!current || this.busy || event.altKey || !['Enter', ' ', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
         event.preventDefault()
         event.stopPropagation()
-        const input = event.target
-        input.dispatchEvent(new Event('change', {bubbles: true}))
-        if (!input.checkValidity()) { input.reportValidity(); return }
-        const row = Math.max(0, Math.min(31, Number(input.dataset.row) + (event.key === 'ArrowUp' ? -1 : 1)))
-        const next = this.control(`input[data-row="${row}"]`)
-        next.focus()
-        next.select()
+        if (current.getAttribute('aria-disabled') === 'true') return
+        const selector = current.dataset.track !== undefined ? 'th[data-track]' : 'th[data-action="pattern"]'
+        const headers = [...this.querySelectorAll(selector)].filter(header => header.getAttribute('aria-disabled') !== 'true')
+        let index = headers.indexOf(current)
+        if (index < 0) throw new Error('Header selector is missing from the synth')
+        if (event.key === 'Home') index = 0
+        else if (event.key === 'End') index = headers.length - 1
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') index = Math.max(0, Math.min(headers.length - 1, index + (event.key === 'ArrowLeft' ? -1 : 1)))
+        this.selectHeader(headers[index])
+    }
+
+    navigateSequence(event) {
+        const current = event.target.closest('tr[data-step]')
+        if (!current || this.busy || event.altKey || !['Enter', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        event.preventDefault()
+        event.stopPropagation()
+        let step = Number(current.dataset.step)
+        let track = this.track
+        if (event.key === 'Home') step = 0
+        else if (event.key === 'End') step = this.sequenceSteps() - 1
+        else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') step = Math.max(0, Math.min(this.sequenceSteps() - 1, step + (event.key === 'ArrowUp' ? -1 : 1)))
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') track = Math.max(0, Math.min(7, track + (event.key === 'ArrowLeft' ? -1 : 1)))
+        this.selectSequenceRow(this.control(`tr[data-step="${step}"]`), track, true)
+    }
+
+    navigateNotes(event) {
+        const current = event.target.closest('tr[data-pattern][data-row]')
+        if (!current || this.busy || event.altKey || !['Enter', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        event.preventDefault()
+        event.stopPropagation()
+        const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+        let row = Number(current.dataset.row)
+        let pattern = Number(current.dataset.pattern)
+        if (event.key === 'Home' || event.key === 'End') {
+            row = event.key === 'Home' ? 0 : 31
+            if (event.ctrlKey || event.metaKey) pattern = event.key === 'Home' ? 0 : 8
+        } else if (horizontal) {
+            pattern = Math.max(0, Math.min(8, pattern + (event.key === 'ArrowLeft' ? -1 : 1)))
+        } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            row = Math.max(0, Math.min(31, row + (event.key === 'ArrowUp' ? -1 : 1)))
+        }
+        this.selectPatternRow(this.control(`tr[data-pattern="${pattern}"][data-row="${row}"]`), true, event.shiftKey)
+    }
+
+    playbackPosition() {
+        if (!this.playback) return null
+        const playback = this.playback
+        const elapsed = Math.max(0, this.audio.currentTime - playback.startedAt)
+        const absoluteRow = Math.floor(elapsed * 44100 / playback.rowLength)
+        const steps = playback.mode === 'song' ? Math.max(...playback.sequences.map(sequence => sequence.length)) : 1
+        // Envelope and delay tails are audible, but no new rows are being played.
+        if (absoluteRow >= steps * 32) return {step: null, pattern: null, row: null}
+        if (playback.mode === 'pattern') {
+            return {step: null, pattern: this.track === playback.track ? playback.pattern : null, row: absoluteRow}
+        }
+        const step = Math.floor(absoluteRow / 32)
+        const pattern = playback.sequences[this.track][step]
+        return {step, pattern: pattern ? pattern - 1 : null, row: absoluteRow % 32}
+    }
+
+    cancelPlaybackFrame() {
+        if (this.playbackFrame !== null) {
+            cancelAnimationFrame(this.playbackFrame)
+            this.playbackFrame = null
+        }
+    }
+
+    startPlaybackUpdates() {
+        this.cancelPlaybackFrame()
+        if (!this.playback || this.paused) return
+        const playback = this.playback
+        let lastPosition = ''
+        const tick = () => {
+            if (this.playback !== playback || !this.isConnected || this.paused) return
+            this.playbackFrame = null
+            const position = JSON.stringify([this.track, this.playbackPosition()])
+            if (position !== lastPosition) {
+                lastPosition = position
+                this.updateSelection()
+            }
+            this.playbackFrame = requestAnimationFrame(tick)
+        }
+        tick()
+    }
+
+    clearPlayback() {
+        this.cancelPlaybackFrame()
+        this.playback = null
+        if (this.isConnected) this.updateSelection()
     }
 
     updateTransport() {
@@ -241,6 +502,10 @@ export class ViewSynth extends HTMLElement {
         else await audio.resume()
         if (!this.isConnected || this.source !== source) return
         this.paused = paused
+        if (paused) {
+            this.cancelPlaybackFrame()
+        } else this.startPlaybackUpdates()
+        this.updateSelection()
         this.updateTransport()
         this.status(paused ? 'Playback paused.' : 'Playback resumed.')
     }
@@ -253,6 +518,7 @@ export class ViewSynth extends HTMLElement {
             this.source = null
         }
         this.paused = false
+        this.clearPlayback()
         this.updateTransport()
     }
 
@@ -293,10 +559,23 @@ export class ViewSynth extends HTMLElement {
             source.disconnect()
             this.source = null
             this.paused = false
+            this.clearPlayback()
             this.updateTransport()
             this.status('Playback finished.')
         }
-        source.start()
+        const startedAt = audio.currentTime
+        if (mode !== 'note') {
+            // Snapshot the rendered arrangement; changing the viewed track must not
+            // change which pattern the already-generated audio is playing.
+            this.playback = {
+                mode, startedAt, rowLength: this.song[0], track: this.track, pattern: this.pattern,
+                sequences: this.song[1].map(track => [...track[1]]),
+            }
+        }
+        source.start(startedAt)
+        this.previewNote = mode === 'note' ? note : null
+        this.updateSelection()
+        this.startPlaybackUpdates()
         this.updateTransport()
         this.status(`Playing ${mode} (${buffer.duration.toFixed(1)} seconds).`)
     }
@@ -332,6 +611,9 @@ export class ViewSynth extends HTMLElement {
                 this.song = song
                 this.track = 0
                 this.pattern = 0
+                this.row = 0
+                this.rowAnchor = 0
+                this.step = 0
                 this.render()
                 this.status('Imported song. Export JSON before closing to keep further edits.')
             })
@@ -341,16 +623,34 @@ export class ViewSynth extends HTMLElement {
     }
 
     async action(action, button) {
+        if (action === 'piano-octave') {
+            if (button.getAttribute('aria-disabled') === 'true') return
+            const offset = Number(button.dataset.offset)
+            const octave = this.pianoOctave + offset
+            if (![-1, 1].includes(offset) || octave < 0 || octave > 7) throw new Error('Invalid piano octave change')
+            this.pianoOctave = octave
+            this.renderPiano()
+            const focusOffset = octave + offset < 0 || octave + offset > 7 ? -offset : offset
+            this.control(`g[data-action="piano-octave"][data-offset="${focusOffset}"]`).focus()
+            return
+        }
         const transportActive = action === 'play-pause' && this.source
         if (action !== 'stop' && action !== 'import' && !transportActive) {
             if (!this.control('form').reportValidity()) return
             const bpm = this.header.querySelector('[data-field="bpm"]')
             if (!bpm.reportValidity()) return
         }
-        if (action === 'tab') {
-            this.tab = button.dataset.tab
-            this.querySelectorAll('[role="tab"]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)))
-            this.renderEditor()
+        if (action === 'add-step' || action === 'remove-step') {
+            const steps = this.sequenceSteps()
+            if (action === 'add-step') {
+                if (steps === 64) throw new Error('Sequences are limited to 64 steps')
+                for (const track of this.song[1]) while (track[1].length <= steps) track[1].push(0)
+            } else {
+                for (const track of this.song[1]) track[1] = track[1].slice(0, steps - 1)
+            }
+            this.stop()
+            this.renderSequence()
+            this.status('Sequence resized. Export JSON to keep your work.')
             return
         }
         if (action === 'play-pause') { await this.togglePlayback(); return }
@@ -361,13 +661,6 @@ export class ViewSynth extends HTMLElement {
             this.status('Exported song JSON.')
             return
         }
-        if (action === 'clear') {
-            this.song[1][this.track][2][this.pattern].fill(0)
-            this.stop()
-            this.renderEditor()
-            this.status('Cleared pattern. Export JSON to keep your work.')
-            return
-        }
         if (action === 'wav') {
             // Offline buffer generation must not resume paused playback.
             const audio = await this.context(false)
@@ -376,9 +669,16 @@ export class ViewSynth extends HTMLElement {
             this.status('Exported stereo 16-bit WAV at 44100 Hz.')
             return
         }
-        if (action === 'row' || action === 'note') {
-            const note = action === 'row' ? this.song[1][this.track][2][this.pattern][Number(button.dataset.row)] : parseNote(this.control('[data-field="preview"]').value)
-            if (!note) { this.status('Choose a non-empty note to preview.'); return }
+        if (action === 'piano-note') {
+            const note = Number(button.dataset.note)
+            const index = note - parseNote(`C${this.pianoOctave}`)
+            if (!Number.isInteger(index) || index < 0 || index >= 36) throw new Error('Invalid piano key')
+            this.song[1][this.track][2][this.pattern].fill(note, Math.min(this.rowAnchor, this.row), Math.max(this.rowAnchor, this.row) + 1)
+            this.renderPatterns()
+            this.updateSelection()
+            this.pianoFocus = index
+            this.updatePiano()
+            button.focus()
             await this.play('note', note)
             return
         }
