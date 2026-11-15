@@ -11,6 +11,8 @@ export class ViewSynth extends HTMLElement {
         this.tab = 'pattern'
         this.audio = null
         this.source = null
+        this.paused = false
+        this.playMode = 'song'
         this.busy = false
         this.generation = 0
         this.statusText = 'Enter notes such as C5 or F#4. Export JSON to keep your work.'
@@ -57,6 +59,7 @@ export class ViewSynth extends HTMLElement {
     unmountHeader() {
         if (!this.header) return
         this.header.removeEventListener('click', this.onClick)
+        this.header.removeEventListener('change', this.onChange)
         this.header.remove()
         this.header = null
     }
@@ -66,21 +69,21 @@ export class ViewSynth extends HTMLElement {
         this.innerHTML = `
             <div slot="header-controls">
                 <div role="buttongroup" data-element="file-actions">
-                    <button type="button" data-action="import">Import JSON</button>
-                    <button type="button" data-action="save">Export JSON</button>
-                    <button type="button" data-action="wav">Export WAV</button>
+                    <button type="button" data-action="import" aria-label="Import JSON"><i aria-hidden="true">folder_open</i></button>
+                    <button type="button" data-action="save" aria-label="Export JSON"><i aria-hidden="true">save</i></button>
+                    <button type="button" data-action="wav" aria-label="Export WAV"><i aria-hidden="true">audio_file</i></button>
                 </div>
                 <div role="buttongroup" data-element="tool-actions">
-                    <button type="button" data-action="song">Play song</button>
-                    <button type="button" data-action="pattern">Play pattern</button>
-                    <button type="button" data-action="stop">Stop</button>
+                    <button type="button" data-action="play-pause" aria-label="Play"><i aria-hidden="true">play_arrow</i></button>
+                    <button type="button" data-action="stop" aria-label="Stop"><i aria-hidden="true">stop</i></button>
+                    <select data-field="play-mode" aria-label="Playback mode"><option value="song">Song</option><option value="pattern">Pattern</option></select>
                 </div>
+                <label>BPM <input type="number" data-field="bpm" min="40" max="661" step="1" required ${SYNTH_TEXT}></label>
             </div>
             <form aria-label="Synth tracker">
                 <fieldset><legend>Editor</legend>
                     <label>Track <select data-field="track">${Array.from({length: 8}, (_, i) => `<option value="${i}">Track ${i + 1}</option>`).join('')}</select></label>
                     <label>Pattern <select data-field="pattern">${Array.from({length: 9}, (_, i) => `<option value="${i}">${i + 1}</option>`).join('')}</select></label>
-                    <label>Tempo (BPM) <input type="number" data-field="bpm" min="40" max="661" step="1" required ${SYNTH_TEXT}></label>
                 </fieldset>
                 <div role="tablist" aria-label="Synth editors">
                     ${['pattern', 'instrument', 'song'].map(tab => `<button type="button" role="tab" data-action="tab" data-tab="${tab}" aria-selected="${this.tab === tab}">${tab[0].toUpperCase() + tab.slice(1)}</button>`).join('')}
@@ -92,10 +95,13 @@ export class ViewSynth extends HTMLElement {
         if (!this.parentElement) throw new Error('Synth requires a Host Area parent')
         this.header = this.control('[slot="header-controls"]')
         this.header.addEventListener('click', this.onClick)
+        this.header.addEventListener('change', this.onChange)
         this.parentElement.append(this.header)
         this.control('[data-field="track"]').value = String(this.track)
         this.control('[data-field="pattern"]').value = String(this.pattern)
-        this.control('[data-field="bpm"]').value = String(Math.round(60 * 44100 / 4 / this.song[0]))
+        this.header.querySelector('[data-field="bpm"]').value = String(Math.round(60 * 44100 / 4 / this.song[0]))
+        this.header.querySelector('[data-field="play-mode"]').value = this.playMode
+        this.updateTransport()
         this.renderEditor()
         this.status(this.statusText)
     }
@@ -179,6 +185,12 @@ export class ViewSynth extends HTMLElement {
                 this[input.dataset.field] = Number(input.value)
                 this.renderEditor()
                 return
+            } else if (input.dataset.field === 'play-mode') {
+                if (!['song', 'pattern'].includes(input.value)) throw new Error('Unknown playback mode')
+                this.playMode = input.value
+                this.stop()
+                this.status(`Ready to play ${this.playMode}.`)
+                return
             } else if (input.dataset.field === 'bpm') {
                 const bpm = input.valueAsNumber
                 if (!Number.isInteger(bpm) || bpm < 40 || bpm > 661) throw new Error('Tempo must be an integer from 40 to 661 BPM')
@@ -209,6 +221,30 @@ export class ViewSynth extends HTMLElement {
         next.select()
     }
 
+    updateTransport() {
+        // The header is absent after disconnect and before the initial render.
+        if (!this.header) return
+        const button = this.header.querySelector('[data-action="play-pause"]')
+        if (!button) throw new Error('Synth is missing its playback toggle')
+        const playing = Boolean(this.source) && !this.paused
+        button.setAttribute('aria-label', playing ? 'Pause' : this.paused ? 'Resume' : 'Play')
+        button.querySelector('i').textContent = playing ? 'pause' : 'play_arrow'
+    }
+
+    async togglePlayback() {
+        if (!this.source) { await this.play(this.playMode); return }
+        const audio = this.audio
+        if (!audio) throw new Error('Playback requires an audio context')
+        const source = this.source
+        const paused = !this.paused
+        if (paused) await audio.suspend()
+        else await audio.resume()
+        if (!this.isConnected || this.source !== source) return
+        this.paused = paused
+        this.updateTransport()
+        this.status(paused ? 'Playback paused.' : 'Playback resumed.')
+    }
+
     stop() {
         if (this.source) {
             this.source.onended = null
@@ -216,12 +252,14 @@ export class ViewSynth extends HTMLElement {
             this.source.disconnect()
             this.source = null
         }
+        this.paused = false
+        this.updateTransport()
     }
 
-    async context() {
+    async context(resume = true) {
         if (!this.audio) this.audio = new AudioContext()
         const audio = this.audio
-        await audio.resume()
+        if (resume) await audio.resume()
         // A layout close can happen while the operating system resumes audio.
         return this.isConnected && this.audio === audio ? audio : null
     }
@@ -254,9 +292,12 @@ export class ViewSynth extends HTMLElement {
             if (this.source !== source) return
             source.disconnect()
             this.source = null
+            this.paused = false
+            this.updateTransport()
             this.status('Playback finished.')
         }
         source.start()
+        this.updateTransport()
         this.status(`Playing ${mode} (${buffer.duration.toFixed(1)} seconds).`)
     }
 
@@ -300,13 +341,19 @@ export class ViewSynth extends HTMLElement {
     }
 
     async action(action, button) {
-        if (action !== 'stop' && action !== 'import' && !this.control('form').reportValidity()) return
+        const transportActive = action === 'play-pause' && this.source
+        if (action !== 'stop' && action !== 'import' && !transportActive) {
+            if (!this.control('form').reportValidity()) return
+            const bpm = this.header.querySelector('[data-field="bpm"]')
+            if (!bpm.reportValidity()) return
+        }
         if (action === 'tab') {
             this.tab = button.dataset.tab
             this.querySelectorAll('[role="tab"]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)))
             this.renderEditor()
             return
         }
+        if (action === 'play-pause') { await this.togglePlayback(); return }
         if (action === 'stop') { this.stop(); this.status('Stopped.'); return }
         if (action === 'import') { await this.importSong(); return }
         if (action === 'save') {
@@ -322,7 +369,8 @@ export class ViewSynth extends HTMLElement {
             return
         }
         if (action === 'wav') {
-            const audio = await this.context()
+            // Offline buffer generation must not resume paused playback.
+            const audio = await this.context(false)
             if (!audio) return
             this.download('song.wav', encodeWav(this.buffer(audio, 'song')), 'audio/wav')
             this.status('Exported stereo 16-bit WAV at 44100 Hz.')
@@ -334,7 +382,6 @@ export class ViewSynth extends HTMLElement {
             await this.play('note', note)
             return
         }
-        if (action === 'song' || action === 'pattern') { await this.play(action); return }
         throw new Error(`Unknown synth action: ${action}`)
     }
 

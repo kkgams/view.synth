@@ -14,8 +14,9 @@ status: reference
 | Compose | Select a track and pattern, then edit its note rows |
 | Arrange | Enter sequence numbers `0`–`9`: `0` is silent, `1`–`9` select patterns |
 | Shape sound | Edit the selected track's 29 instrument controls |
-| Listen | Preview a note, play the current pattern or play the song; stop playback when finished |
-| Save or load | Export a song as JSON, or import a compatible JSON song |
+| Listen | Choose Song or Pattern in the header, then use Play/Pause to start, pause or resume at the same position; Stop resets playback. Note previews remain in the editor. |
+| Tempo | Change BPM in the header; changing tempo or playback mode stops the current playback. |
+| Save or load | Use the header's folder icon to import JSON, disk icon to export JSON, or audio-file icon to export WAV. Import replaces the current song. |
 | Render | Export the song as PCM WAV audio |
 
 ## Song format
