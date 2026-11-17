@@ -286,7 +286,7 @@ test('piano highlights follow audition playback, pause/resume and stop', async (
     const keys = [135, 136].map(note => ({
         dataset: {note: String(note)}, attributes: {}, fill: null,
         setAttribute(name, value) { this.attributes[name] = value },
-        querySelector() { return {setAttribute: (name, value) => { this.fill = value }} },
+        querySelector() { return {setAttribute: (_name, value) => { this.fill = value }} },
     }))
     view.querySelectorAll = selector => selector === 'g[data-action="piano-note"]' ? keys : []
     view.source = {stop() {}, disconnect() {}}
@@ -310,7 +310,7 @@ test('selecting a pattern row highlights just that row without changing song dat
         {dataset: {pattern: '0', row: '0'}},
         {dataset: {pattern: '8', row: '31'}},
         {dataset: {pattern: '8', row: '30'}},
-    ].map(row => ({...row, attributes: {}, setAttribute(name, value) { this.attributes[name] = value }, focus() { this.focused = true }}))
+    ].map(row => ({...row, attributes: {}, focused: false, setAttribute(name, value) { this.attributes[name] = value }, focus() { this.focused = true }}))
     view.querySelectorAll = selector => selector === 'tr[data-pattern][data-row]' ? rows : []
     const before = JSON.stringify(view.song)
     view.selectPatternRow(rows[1], true)
@@ -435,7 +435,7 @@ test('pattern header activation updates pressed state and preserves focus withou
     const view = editor()
     const before = JSON.stringify(view.song)
     const headers = Array.from({length: 9}, (_, pattern) => ({
-        dataset: {action: 'pattern', pattern: String(pattern)}, attributes: {},
+        dataset: {action: 'pattern', pattern: String(pattern)}, attributes: {}, focused: false,
         getAttribute(name) { return this.attributes[name] ?? null },
         setAttribute(name, value) { this.attributes[name] = value },
         focus() { this.focused = true },
@@ -475,7 +475,7 @@ test('pattern header keyboard navigation remains in its group and skips disabled
 test('sequencer row selection highlights a single step without modifying song data', () => {
     const view = editor()
     view.song[1][0][1] = [1, 2]
-    const rows = [0, 1].map(step => ({dataset: {step: String(step)}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value }, focus() { this.focused = true }}))
+    const rows = [0, 1].map(step => ({dataset: {step: String(step)}, attributes: {}, focused: false, setAttribute(name, value) { this.attributes[name] = value }, focus() { this.focused = true }}))
     view.querySelectorAll = selector => selector === 'tr[data-step]' ? rows : []
     const before = JSON.stringify(view.song)
     view.selectSequenceRow(rows[1], 0, true)
