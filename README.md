@@ -19,11 +19,11 @@ Requires Make, Node.js 24, Python 3, curl, zip, unzip and tar; no package instal
 | `make package` | Incremental `build.nosync/view.synth.zip` and `SHA256SUMS` |
 | `make serve-docs` | Preview pinned wiki; independent `DOCS_PORT=8080` |
 | `make validate-docs` / `make docs` | Validate / build `build.nosync/site/` |
-| `make clean` | Remove named generated outputs, marked Host download and completed configured Unit caches; preserve supplied tools and unknown caches |
+| `make clean` | Remove all of `build.nosync/`, `tools/` and `gams_modules/`, without ownership markers; refuse tracked files or symlinks in deletion paths before deleting anything. |
 
 Edit `src/vendor/pl_synth.js`, `src/model.mjs` and `src/views/view-synth.js`. Make concatenates them in that order, stripping model `export ` prefixes. Only the Host helper remains imported. The Project loads the assembled module, not source files individually.
 
-First launch downloads pinned GAMS v3.2.0 and resolves pinned supporting Units. Existing tools are not updated implicitly; downloaded Host notices remain beside the app. Launch sets `GAMS_APP_CWD` and selects local `gams.json`. Clean refuses tracked output, symlinks and unidentified tools/caches.
+First launch downloads pinned GAMS v3.2.0 and resolves pinned supporting Units. Existing tools are not updated implicitly; downloaded Host notices remain beside the app. Launch sets `GAMS_APP_CWD` and selects local `gams.json`.
 
 Requires GAMS v3.2.0 or newer for the `$file` Project configuration. Native macOS launch and initial editing/preview flows were checked in the released Host; the workspace now shows sequencer, patterns, instruments and piano together without tabs. File import/download gestures and other platforms remain unverified.
 

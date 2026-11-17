@@ -38,7 +38,7 @@ Run `make test check` for DSP, model, WAV and View interaction tests plus assemb
 
 `make package` creates incremental `build.nosync/view.synth.zip` and `SHA256SUMS`. The ZIP contains exactly `views/view-synth.js`, `LICENSE`, `NOTICE` and `licenses/pl_synth-MIT.txt`. Register `views/view-synth.js` as `view-synth` in a consuming Project; plugins, theme and UI Services remain separate dependencies.
 
-`make serve-docs` previews this wiki on independent `DOCS_PORT=8080`; `make validate-docs` validates it and `make docs` builds `build.nosync/site/`. `make clean` removes named generated outputs and identified downloads, refusing tracked files, symlinks and unidentified tools/caches. Supplied tools and unknown caches are preserved.
+`make serve-docs` previews this wiki on independent `DOCS_PORT=8080`; `make validate-docs` validates it and `make docs` builds `build.nosync/site/`. `make clean` removes all of `build.nosync/`, `tools/` and `gams_modules/` without ownership markers. It refuses tracked files or symlinks in deletion paths before deleting anything.
 
 Requires GAMS v3.2.0 or newer for `$file` configuration. Native macOS launch and initial editing/preview flows were checked with the released Host; the current workspace uses simultaneous tables and an SVG piano rather than tabs. File import/download gestures and other platforms remain unverified.
 
