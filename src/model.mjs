@@ -153,6 +153,18 @@ export function renderSongData(song) {
     return normalized
 }
 
+// Fold release and delay samples across the wrap instead of adding time to the beat grid.
+export function loopBuffer(audio, rendered, frames) {
+    const loop = audio.createBuffer(rendered.numberOfChannels, frames, rendered.sampleRate)
+    for (let channel = 0; channel < rendered.numberOfChannels; channel++) {
+        const samples = rendered.getChannelData(channel)
+        const output = loop.getChannelData(channel)
+        output.set(samples.subarray(0, frames))
+        for (let i = frames; i < samples.length; i++) output[i % frames] += samples[i]
+    }
+    return loop
+}
+
 export function encodeWav(buffer) {
     const channels = buffer.numberOfChannels
     if (channels !== 2 || buffer.sampleRate !== 44100) throw new Error("Expected stereo audio at 44100 Hz")

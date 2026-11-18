@@ -10,7 +10,7 @@ let nextFrame = 0
 const source = readFileSync(new URL("../src/views/view-synth.js", import.meta.url), "utf8")
 const ViewSynth = runInNewContext(
     source
-        .replace(/^import .*\n/, "")
+        .replace(/^import .*\n/gm, "")
         .replace("export class ViewSynth", "class ViewSynth")
         .replace(/customElements\.define\(["']view-synth["'], ViewSynth\)/, "ViewSynth"),
     {
@@ -1109,4 +1109,12 @@ test("natural completion resets transport; new playback resumes a suspended cont
     assert.equal(icon.textContent, "play_arrow")
     assert.equal(attributes["aria-label"], "Play")
     assert.deepEqual(calls, ["resume", "disconnect"])
+})
+
+test("loop playhead wraps to the first pattern while preserving the beat grid", () => {
+    const view = playingView("loop")
+    for (const [absoluteRow, step, pattern, row] of [[95, 2, 2, 31], [96, 0, 1, 0], [132, 1, null, 4]]) {
+        view.audio.currentTime = 100 + absoluteRow / 4
+        assert.deepEqual({ ...view.playbackPosition() }, { step, pattern, row })
+    }
 })

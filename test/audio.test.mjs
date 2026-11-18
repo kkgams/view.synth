@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import vm from "node:vm"
-import { encodeWav, normalizeInstrument, PRESETS, renderLength, renderSongData } from "../src/model.mjs"
+import { encodeWav, loopBuffer, normalizeInstrument, PRESETS, renderLength, renderSongData } from "../src/model.mjs"
 
 // Only the AudioBuffer data contract is supplied: the unmodified vendor engine
 // performs all oscillation, envelopes, filtering, mixing and delay itself.
@@ -145,4 +145,34 @@ test("WAV rejects unsupported formats and non-finite samples in either channel",
             assert.throws(() => encodeWav(buffer), /non-finite audio/)
         }
     }
+})
+
+test("loop render folds a release into the first frames without adding to the period", () => {
+    const rendered = audioBuffer(2, 6, 44100)
+    rendered.getChannelData(0).set([0.25, 0.5, -0.5, 0, 0.25, -0.25])
+    rendered.getChannelData(1).set([-0.25, -0.5, 0.5, 0, -0.25, 0.25])
+    const loop = loopBuffer({ createBuffer: audioBuffer }, rendered, 4)
+    assert.equal(loop.length, 4)
+    assert.deepEqual([...loop.getChannelData(0)], [0.5, 0.25, -0.5, 0])
+    assert.deepEqual([...loop.getChannelData(1)], [-0.5, -0.25, 0.5, 0])
+})
+
+test("Iron Circuit is the configured song and renders a 16-bar WAV without clipping or a large seam", () => {
+    const config = JSON.parse(readFileSync(new URL("../gams.json", import.meta.url), "utf8"))
+    const layout = config.ui.services["ui-layout"].config.layout
+    assert.equal(layout, '<view-synth data-source="examples/iron-circuit.json" />')
+    const song = JSON.parse(readFileSync(new URL("../examples/iron-circuit.json", import.meta.url), "utf8"))
+    const data = renderSongData(song)
+    assert.equal(data[1].length, 8)
+    assert.ok(data[1].every((track) => track[1].length === 8))
+    const frames = 3759 * 32 * 8
+    const loop = loopBuffer({ createBuffer: audioBuffer }, engine().song(data), frames)
+    assertAudibleFinite(loop)
+    for (let channel = 0; channel < 2; channel++) {
+        const samples = loop.getChannelData(channel)
+        assert.ok(samples.every((sample) => Math.abs(sample) < 1), "mix has headroom")
+        assert.ok(Math.abs(samples[0] - samples.at(-1)) < 0.005, "quiet wrap boundary")
+    }
+    const wav = new DataView(encodeWav(loop))
+    assert.equal(wav.getUint32(40, true), 4 * frames)
 })

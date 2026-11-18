@@ -1,3 +1,4 @@
+import { runtime, unwrap } from "/core/runtime.js"
 import { registerViewPlugin, unregisterViewPlugin } from "/util/view-plugin.js"
 
 const SYNTH_TEXT = 'autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"'
@@ -59,10 +60,13 @@ export class ViewSynth extends HTMLElement {
         this.addEventListener("submit", this.onSubmit)
         this.addEventListener("keydown", this.onKey)
         registerViewPlugin(this)
+        const path = this.getAttribute("data-source")?.trim()
+        if (path && !this.sourceLoaded) void this.perform(() => this.loadSource(path))
     }
 
     disconnectedCallback() {
         this.generation++
+        this.busy = false
         this.stop()
         if (this.audio) {
             void this.audio.close()
@@ -102,7 +106,7 @@ export class ViewSynth extends HTMLElement {
                 <div role="buttongroup" data-element="tool-actions">
                     <button type="button" data-action="play-pause" aria-label="Play"><i aria-hidden="true">play_arrow</i></button>
                     <button type="button" data-action="stop" aria-label="Stop"><i aria-hidden="true">stop</i></button>
-                    <select data-field="play-mode" aria-label="Playback mode"><option value="song">Song</option><option value="pattern">Pattern</option></select>
+                    <select data-field="play-mode" aria-label="Playback mode"><option value="song">Song</option><option value="loop">Loop</option><option value="pattern">Pattern</option></select>
                 </div>
                 <label>BPM <input type="number" data-field="bpm" min="40" max="661" step="1" required ${SYNTH_TEXT}></label>
             </div>
@@ -373,14 +377,15 @@ export class ViewSynth extends HTMLElement {
     async perform(operation) {
         if (this.busy) return
         this.busy = true
+        const generation = this.generation
         try {
             await operation()
         } catch (error) {
             // File input and user-authored synth values can fail; surface the error.
-            this.status(error.message, true)
+            if (this.generation === generation) this.status(error.message, true)
             console.error(error)
         } finally {
-            this.busy = false
+            if (this.generation === generation) this.busy = false
         }
     }
 
@@ -398,7 +403,7 @@ export class ViewSynth extends HTMLElement {
                 instrument[index] = value
                 this.song[1][this.track][0] = normalizeInstrument(instrument)
             } else if (input.dataset.field === "play-mode") {
-                if (!["song", "pattern"].includes(input.value)) throw new Error("Unknown playback mode")
+                if (!["song", "loop", "pattern"].includes(input.value)) throw new Error("Unknown playback mode")
                 this.playMode = input.value
                 this.stop()
                 this.status(`Ready to play ${this.playMode}.`)
@@ -508,8 +513,9 @@ export class ViewSynth extends HTMLElement {
         if (!this.playback) return null
         const playback = this.playback
         const elapsed = Math.max(0, this.audio.currentTime - playback.startedAt)
-        const absoluteRow = Math.floor((elapsed * 44100) / playback.rowLength)
-        const steps = playback.mode === "song" ? Math.max(...playback.sequences.map((sequence) => sequence.length)) : 1
+        let absoluteRow = Math.floor((elapsed * 44100) / playback.rowLength)
+        const steps = playback.mode === "pattern" ? 1 : Math.max(...playback.sequences.map((sequence) => sequence.length))
+        if (playback.mode === "loop") absoluteRow %= steps * 32
         // Envelope and delay tails are audible, but no new rows are being played.
         if (absoluteRow >= steps * 32) return { step: null, pattern: null, row: null }
         if (playback.mode === "pattern") {
@@ -610,7 +616,11 @@ export class ViewSynth extends HTMLElement {
             return synth.sound([...track[0]], note, this.song[0])
         }
         const data = mode === "pattern" ? [this.song[0], [[track[0], [1], [track[2][this.pattern]]]]] : this.song
-        return synth.song(renderSongData(data))
+        const renderData = renderSongData(data)
+        const rendered = synth.song(renderData)
+        if (mode !== "loop") return rendered
+        const frames = renderData[0] * 32 * Math.max(...renderData[1].map((track) => track[1].length))
+        return loopBuffer(audio, rendered, frames)
     }
 
     async play(mode, note) {
@@ -625,6 +635,7 @@ export class ViewSynth extends HTMLElement {
         }
         const source = audio.createBufferSource()
         source.buffer = buffer
+        source.loop = mode === "loop"
         source.connect(audio.destination)
         this.source = source
         source.onended = () => {
@@ -654,7 +665,7 @@ export class ViewSynth extends HTMLElement {
         this.updateSelection()
         this.startPlaybackUpdates()
         this.updateTransport()
-        this.status(`Playing ${mode} (${buffer.duration.toFixed(1)} seconds).`)
+        this.status(`${mode === "loop" ? "Looping song" : `Playing ${mode}`} (${buffer.duration.toFixed(1)} seconds).`)
     }
 
     download(name, data, type) {
@@ -666,6 +677,18 @@ export class ViewSynth extends HTMLElement {
         link.click()
         link.remove()
         setTimeout(() => URL.revokeObjectURL(url), 1000)
+    }
+
+    async loadSource(path) {
+        this.status(`Loading ${path}…`)
+        const generation = this.generation
+        const text = unwrap(await runtime.invoke("fs/fs::read-text", path), `Read ${path}`)
+        if (!this.isConnected || this.generation !== generation) return
+        if (new TextEncoder().encode(text).byteLength > 1024 * 1024) throw new Error("JSON files must be at most 1 MiB")
+        this.song = normalizeSong(JSON.parse(text))
+        this.sourceLoaded = true
+        this.render()
+        this.status(`Loaded ${path}. Select Loop for gapless playback and WAV export.`)
     }
 
     async importSong() {
@@ -688,6 +711,7 @@ export class ViewSynth extends HTMLElement {
                     if (!this.isConnected || this.generation !== generation) return
                     this.stop()
                     this.song = song
+                    this.sourceLoaded = true
                     this.track = 0
                     this.pattern = 0
                     this.row = 0
@@ -756,8 +780,9 @@ export class ViewSynth extends HTMLElement {
             // Offline buffer generation must not resume paused playback.
             const audio = await this.context(false)
             if (!audio) return
-            this.download("song.wav", encodeWav(this.buffer(audio, "song")), "audio/wav")
-            this.status("Exported stereo 16-bit WAV at 44100 Hz.")
+            const loop = this.playMode === "loop"
+            this.download(loop ? "song-loop.wav" : "song.wav", encodeWav(this.buffer(audio, loop ? "loop" : "song")), "audio/wav")
+            this.status(loop ? "Exported loop-ready stereo WAV at 44100 Hz." : "Exported stereo 16-bit WAV at 44100 Hz.")
             return
         }
         if (action === "piano-note") {
