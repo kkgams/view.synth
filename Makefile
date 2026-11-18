@@ -3,7 +3,7 @@
 ARCHIVE := build.nosync/view.synth.zip
 NOTICE_FILES := LICENSE NOTICE licenses/pl_synth-MIT.txt
 SOURCE := build.nosync/views/view-synth.js
-SOURCES := src/vendor/pl_synth.js src/model.mjs src/amp.mjs src/views/view-synth.js
+SOURCES := src/vendor/pl_synth.js src/model.mjs src/views/view-synth.js
 export TMPDIR := $(abspath build.nosync/tmp)
 export PYTHONPYCACHEPREFIX := $(abspath build.nosync/pycache)
 PYTHON ?= python3
@@ -25,7 +25,7 @@ build: $(SOURCE)
 $(SOURCE): $(SOURCES) Makefile | build.nosync/tmp
 	@mkdir -p "$(@D)"
 	@set -eu; trap 'rm -f "$@.tmp"' EXIT; \
-		{ cat src/vendor/pl_synth.js; printf '\n'; sed -e '/^import /d' -e 's/^export //' src/model.mjs src/amp.mjs; printf '\n'; cat src/views/view-synth.js; } > "$@.tmp"; \
+		{ cat src/vendor/pl_synth.js; printf '\n'; sed 's/^export //' src/model.mjs; printf '\n'; cat src/views/view-synth.js; } > "$@.tmp"; \
 		mv "$@.tmp" "$@"
 
 test:

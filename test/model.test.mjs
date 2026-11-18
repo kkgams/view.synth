@@ -23,7 +23,7 @@ test("new songs have independent tracks, instruments and note rows", () => {
     assert.equal(song[0], 5513)
     assert.equal(song[1].length, 8)
     for (const [instrument, sequence, patterns] of song[1]) {
-        assert.equal(instrument.length, 30)
+        assert.equal(instrument.length, 29)
         assert.deepEqual(sequence, [1])
         assert.equal(patterns.length, 9)
         for (const pattern of patterns) assert.deepEqual(pattern, Array(32).fill(0))
@@ -50,7 +50,7 @@ test("compact JSON null entries and holes normalize to dense zero-filled arrays 
     const before = structuredClone(input)
     const normalized = normalizeSong(input)
     assert.deepEqual(input, before)
-    assert.deepEqual(normalized[1][0][0], [7, ...Array(29).fill(0)])
+    assert.deepEqual(normalized[1][0][0], [7, ...Array(28).fill(0)])
     assert.deepEqual(normalized[1][0][1], [1, 0, 0])
     assert.deepEqual(normalized[1][0][2][0], [147, ...Array(31).fill(0)])
     assert.deepEqual(normalized[1][0][2][1], Array(32).fill(0))
@@ -61,20 +61,20 @@ test("compact JSON null entries and holes normalize to dense zero-filled arrays 
 })
 
 test("instrument fields enforce every documented integer range", () => {
-    assert.equal(FIELDS.length, 30)
-    assert.deepEqual(normalizeInstrument([]), Array(30).fill(0))
+    assert.equal(FIELDS.length, 29)
+    assert.deepEqual(normalizeInstrument([]), Array(29).fill(0))
     assert.deepEqual(
         normalizeInstrument(FIELDS.map((field) => field[2])),
         FIELDS.map((field) => field[2]),
     )
     for (const [index, field] of FIELDS.entries()) {
         for (const bad of [-1, field[2] + 1, 0.5, NaN, Infinity, "1", true, {}]) {
-            const instrument = Array(30).fill(0)
+            const instrument = Array(29).fill(0)
             instrument[index] = bad
             assert.throws(() => normalizeInstrument(instrument), /must be an integer/, `field ${index}: ${String(bad)}`)
         }
     }
-    for (const bad of [null, {}, "instrument", Array(31)]) assert.throws(() => normalizeInstrument(bad))
+    for (const bad of [null, {}, "instrument", Array(30)]) assert.throws(() => normalizeInstrument(bad))
 })
 
 test("song normalization rejects malformed shapes and values", () => {

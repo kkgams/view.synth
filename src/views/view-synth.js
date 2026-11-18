@@ -108,8 +108,6 @@ export class ViewSynth extends HTMLElement {
                     <button type="button" data-action="stop" aria-label="Stop"><i aria-hidden="true">stop</i></button>
                     <select data-field="play-mode" aria-label="Playback mode"><option value="song">Song</option><option value="loop">Loop</option><option value="pattern">Pattern</option></select>
                 </div>
-                <label>Guitar amp <select data-instrument="${GUITAR_AMP}">${FIELDS[GUITAR_AMP][3]
-                    .map((mode, index) => `<option value="${index}">${mode}</option>`).join("")}</select></label>
                 <label>BPM <input type="number" data-field="bpm" min="40" max="661" step="1" required ${SYNTH_TEXT}></label>
             </div>
             <form aria-label="Synth tracker">
@@ -195,7 +193,7 @@ export class ViewSynth extends HTMLElement {
     instrumentGroup(group, title = group) {
         return `<table><thead><tr><th colspan="2" scope="col">${title}</th></tr></thead><tbody>${FIELDS.map(
             ([section, name, max, options], index) => {
-                if (section !== group || index === GUITAR_AMP) return ""
+                if (section !== group) return ""
                 const value = this.song[1][this.track][0][index]
                 const attributes = `data-instrument="${index}" aria-label="${group}: ${name}"`
                 const input = options
@@ -209,7 +207,6 @@ export class ViewSynth extends HTMLElement {
     }
 
     renderInstrument() {
-        this.header.querySelector(`[data-instrument="${GUITAR_AMP}"]`).value = String(this.song[1][this.track][0][GUITAR_AMP])
         this.control('[data-element="instrument"]').innerHTML = `<tbody><tr>
             <td>${this.instrumentGroup("Oscillator 1", "OSC 1")}${this.instrumentGroup("Oscillator 2", "OSC 2")}</td>
             <td>${this.instrumentGroup("Envelope", "ENV")}${this.instrumentGroup("LFO")}</td>
@@ -405,11 +402,6 @@ export class ViewSynth extends HTMLElement {
                 const instrument = [...this.song[1][this.track][0]]
                 instrument[index] = value
                 this.song[1][this.track][0] = normalizeInstrument(instrument)
-                if (index === GUITAR_AMP) {
-                    this.stop()
-                    this.status(`Track ${this.track + 1} guitar amp: ${FIELDS[GUITAR_AMP][3][value]}. Press Play to hear it.`)
-                    return
-                }
             } else if (input.dataset.field === "play-mode") {
                 if (!["song", "loop", "pattern"].includes(input.value)) throw new Error("Unknown playback mode")
                 this.playMode = input.value
@@ -621,10 +613,14 @@ export class ViewSynth extends HTMLElement {
         const track = this.song[1][this.track]
         if (mode === "note") {
             renderLength([this.song[0], [[track[0], [1], []]]])
-            return renderNote(synth, track[0], note, this.song[0])
+            return synth.sound([...track[0]], note, this.song[0])
         }
         const data = mode === "pattern" ? [this.song[0], [[track[0], [1], [track[2][this.pattern]]]]] : this.song
-        return renderArrangement(synth, audio, data, mode === "loop")
+        const renderData = renderSongData(data)
+        const rendered = synth.song(renderData)
+        if (mode !== "loop") return rendered
+        const frames = renderData[0] * 32 * Math.max(...renderData[1].map((track) => track[1].length))
+        return loopBuffer(audio, rendered, frames)
     }
 
     async play(mode, note) {

@@ -1,6 +1,5 @@
 // Instrument ordering and presets adapted from PL_SYNTH tracker.html; see NOTICE.
 const WAVES = ["Sine", "Square", "Saw", "Triangle"]
-export const GUITAR_AMP = 29
 export const FIELDS = [
     ["Oscillator 1", "Octave", 16],
     ["Oscillator 1", "Semitone", 11],
@@ -31,7 +30,6 @@ export const FIELDS = [
     ["LFO", "Frequency", 16],
     ["LFO", "Amount", 255],
     ["LFO", "Waveform", 3, WAVES],
-    ["Effects", "Guitar amp", 2, ["Off", "Rhythm", "Lead"]],
 ]
 export const PRESETS = {
     Default: [7, 0, 0, 0, 192, 0, 7, 0, 0, 0, 192, 0, 0, 200, 2000, 20000, 192],
@@ -45,8 +43,6 @@ export const PRESETS = {
     // Named by role here; copied from tracks 1 and 2 of the upstream example song.
     "PL_SYNTH Demo Arp": [7, 0, 0, 0, 121, 1, 7, 0, 0, 0, 91, 3, 0, 100, 1212, 5513, 100, 0, 6, 19, 3, 121, 6, 21, 0, 1, 1, 29, 0],
     "PL_SYNTH Demo Lead": [7, 0, 0, 0, 192, 1, 6, 0, 9, 0, 192, 1, 25, 137, 1111, 16157, 124, 1, 982, 89, 6, 25, 6, 77, 0, 1, 3, 69, 0],
-    "Palm-muted Power Chord": [8, 0, 0, 0, 218, 3, 8, 7, 1, 0, 165, 3, 0, 40, 300, 2560, 158, 2, 3800, 150, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    "Overdriven Lead": [8, 0, 0, 0, 190, 3, 9, 0, 2, 0, 80, 2, 0, 160, 3450, 5130, 148, 2, 3700, 151, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
 }
 
 function integer(value, min, max, name) {
