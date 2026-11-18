@@ -90,6 +90,7 @@ test("workspace sections use spanning table headers without redundant fieldsets"
     view.renderEditor = () => {}
     view.render()
     const heading = /<thead>([\s\S]*?)<\/thead>/.exec(view.innerHTML)[1]
+    assert.match(view.innerHTML, /<label>Guitar amp <select data-instrument="29"/)
     assert.match(heading, /<th scope="col">Sequencer<\/th><td><div role="buttongroup">/)
     const actions = /<td>([\s\S]*?)<\/td>/.exec(heading)[1]
     for (const action of ["add-step", "remove-step"]) {
@@ -145,7 +146,7 @@ test("instrument panels render every parameter once", () => {
         .sort((a, b) => a - b)
     assert.deepEqual(
         indices,
-        Array.from({ length: model.FIELDS.length }, (_, i) => i),
+        Array.from({ length: model.GUITAR_AMP }, (_, i) => i),
     )
     for (const title of ["OSC 1", "OSC 2", "ENV", "FX", "LFO", "Preset"])
         assert.ok(html.includes(`<th colspan="2" scope="col">${title}</th>`))
@@ -178,7 +179,7 @@ test("numeric instrument fields render bounded integer sliders while other contr
     }
     assert.doesNotMatch(html, /type="number"/)
     assert.equal((html.match(/type="checkbox"/g) || []).length, 4)
-    assert.equal((html.match(/<select data-instrument=/g) || []).length, 5)
+    assert.equal((html.match(/<select data-instrument=/g) || []).length, 4)
 })
 
 test("instrument slider changes update the selected track and retain strict value validation", () => {
@@ -1117,4 +1118,23 @@ test("loop playhead wraps to the first pattern while preserving the beat grid", 
         view.audio.currentTime = 100 + absoluteRow / 4
         assert.deepEqual({ ...view.playbackPosition() }, { step, pattern, row })
     }
+})
+
+test("toolbar guitar amp follows the selected track and only edits that track", () => {
+    const view = editor()
+    const selector = `[data-instrument="${model.GUITAR_AMP}"]`
+    const control = view.control(selector)
+    const query = view.header.querySelector
+    view.header.querySelector = (key) => key === selector ? control : query(key)
+    view.song[1][0][0] = model.normalizeInstrument(model.PRESETS["Palm-muted Power Chord"])
+    view.renderInstrument()
+    assert.equal(control.value, "1")
+    view.selectTrack(2)
+    assert.equal(control.value, "0")
+    view.change({ matches: () => true, dataset: { instrument: String(model.GUITAR_AMP) }, value: "2" })
+    assert.equal(view.song[1][2][0][model.GUITAR_AMP], 2)
+    assert.equal(view.song[1][0][0][model.GUITAR_AMP], 1)
+    assert.match(view.statusText, /Track 3 guitar amp: Lead/)
+    view.selectTrack(0)
+    assert.equal(control.value, "1")
 })

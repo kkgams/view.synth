@@ -1,17 +1,19 @@
 import { GUITAR_AMP, loopBuffer, renderLength, renderSongData } from "./model.mjs"
 
 // Tight rhythm and warmer lead voicings. Only guitar tracks go through the amp.
-const GUITAR_AMPS = [null, { gain: 20, bassCut: 105, speakerCut: 3500 }, { gain: 12, bassCut: 160, speakerCut: 2800 }]
+const GUITAR_AMPS = [null, { gain: 42, bassCut: 145, speakerCut: 3100, powerGain: 3.3 }, { gain: 12, bassCut: 160, speakerCut: 2800, powerGain: 1 }]
 
-function ampSamples(samples, rate, { gain, bassCut, speakerCut }, loop) {
+function ampSamples(samples, rate, { gain, bassCut, speakerCut, powerGain }, loop) {
     const coefficient = (hz) => 1 - Math.exp((-2 * Math.PI * hz) / rate)
     const bass = coefficient(bassCut)
     const dc = coefficient(75)
     const speaker = coefficient(speakerCut)
+    const body = coefficient(520)
     let low = 0
     let bias = 0
     let cone = 0
     let cabinet = 0
+    let lowerMids = 0
     // Prime filter state with the end of the same loop instead of starting it cold at the seam.
     const warmup = loop ? Math.min(samples.length, 1536) : 0
     for (let i = -warmup; i < samples.length; i++) {
@@ -20,9 +22,12 @@ function ampSamples(samples, rate, { gain, bassCut, speakerCut }, loop) {
         const driven = gain * (input - low)
         const clipped = driven / (1 + Math.abs(driven))
         bias += dc * (clipped - bias)
-        cone += speaker * (clipped - bias - cone)
+        // Push the rhythm preamp into a second, harder clipping stage.
+        const power = Math.max(-1, Math.min(1, powerGain * (clipped - bias)))
+        cone += speaker * (power - cone)
         cabinet += speaker * (cone - cabinet)
-        if (i >= 0) samples[i] = 0.27 * (cabinet + 0.22 * (cone - cabinet))
+        lowerMids += body * (cabinet - lowerMids)
+        if (i >= 0) samples[i] = 0.20 * (cabinet + 0.38 * (cabinet - lowerMids))
     }
 }
 

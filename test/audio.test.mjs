@@ -165,7 +165,8 @@ test("Iron Circuit is the configured song and renders a 16-bar WAV without clipp
     assert.equal(layout, '<view-synth data-source="examples/iron-circuit.json" />')
     const song = JSON.parse(readFileSync(new URL("../examples/iron-circuit.json", import.meta.url), "utf8"))
     const data = renderSongData(song)
-    assert.equal(data[1].length, 8)
+    assert.equal(data[1].length, 7, "no competing lead track")
+    assert.deepEqual(data[1].map(([instrument]) => instrument[GUITAR_AMP]), [1, 1, 0, 0, 0, 0, 0])
     assert.ok(data[1].every((track) => track[1].length === 8))
     const frames = 3759 * 32 * 8
     const loop = renderArrangement(engine(), { createBuffer: audioBuffer }, song, true)
