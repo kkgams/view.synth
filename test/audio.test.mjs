@@ -2,7 +2,9 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import vm from "node:vm"
-import { encodeWav, loopBuffer, normalizeInstrument, PRESETS, renderLength, renderSongData } from "../src/model.mjs"
+import { renderArrangement, renderNote } from "../src/amp.mjs"
+
+import { encodeWav, GUITAR_AMP, loopBuffer, normalizeInstrument, PRESETS, renderLength, renderSongData } from "../src/model.mjs"
 
 // Only the AudioBuffer data contract is supplied: the unmodified vendor engine
 // performs all oscillation, envelopes, filtering, mixing and delay itself.
@@ -166,7 +168,7 @@ test("Iron Circuit is the configured song and renders a 16-bar WAV without clipp
     assert.equal(data[1].length, 8)
     assert.ok(data[1].every((track) => track[1].length === 8))
     const frames = 3759 * 32 * 8
-    const loop = loopBuffer({ createBuffer: audioBuffer }, engine().song(data), frames)
+    const loop = renderArrangement(engine(), { createBuffer: audioBuffer }, song, true)
     assertAudibleFinite(loop)
     for (let channel = 0; channel < 2; channel++) {
         const samples = loop.getChannelData(channel)
@@ -175,4 +177,45 @@ test("Iron Circuit is the configured song and renders a 16-bar WAV without clipp
     }
     const wav = new DataView(encodeWav(loop))
     assert.equal(wav.getUint32(40, true), 4 * frames)
+})
+
+test("overdrive adds power-chord harmonics and both amp voicings are distinct", () => {
+    const instrument = normalizeInstrument(PRESETS["Palm-muted Power Chord"])
+    const synth = engine()
+    const rhythm = renderNote(synth, instrument, 115, 3759)
+    instrument[GUITAR_AMP] = 2
+    const lead = renderNote(synth, instrument, 115, 3759)
+    instrument[GUITAR_AMP] = 0
+    const dry = renderNote(synth, instrument, 115, 3759)
+    const harmonic = (buffer, freq) => Math.hypot(...[Math.sin, Math.cos].map((wave) =>
+        buffer.getChannelData(0).reduce((sum, sample, i) => sum + sample * wave(i * 2 * Math.PI * freq / 44100), 0),
+    ))
+    for (const wet of [rhythm, lead]) {
+        assertAudibleFinite(wet)
+        assert.equal(wet.length, dry.length)
+        assert.ok(harmonic(wet, 164) > 1.5 * harmonic(dry, 164))
+    }
+    assert.notDeepEqual(rhythm.getChannelData(0), lead.getChannelData(0))
+})
+
+test("bundled demo song still renders byte-for-byte with the amp off", () => {
+    const song = JSON.parse(readFileSync(new URL("../phoboslab-song.json", import.meta.url), "utf8"))
+    const original = encodeWav(engine().song(song))
+    const rendered = renderArrangement(engine(), { createBuffer: audioBuffer }, song)
+    assert.deepEqual(encodeWav(rendered), original)
+})
+
+test("adding an amp track does not drive the dry drums or extend a loop", () => {
+    const guitar = normalizeInstrument(PRESETS["Palm-muted Power Chord"])
+    const drum = normalizeInstrument(PRESETS["Bass drum"])
+    const song = [1000, [[guitar, [1], [[115]]], [drum, [0, 1], [[137]]]]]
+    const audio = { createBuffer: audioBuffer }
+    for (const loop of [false, true]) {
+        const mixed = renderArrangement(engine(), audio, song, loop)
+        const drums = renderArrangement(engine(), audio, [1000, [song[1][1]]], loop)
+        assert.equal(mixed.length, loop ? 64000 : renderLength(song))
+        for (let c = 0; c < 2; c++) {
+            assert.deepEqual(mixed.getChannelData(c).subarray(32000), drums.getChannelData(c).subarray(32000))
+        }
+    }
 })

@@ -6,5 +6,7 @@ Source: https://github.com/justgook/pl_synth
 Pinned commit: 03bf74cb6f953e6ecc2f527bc40f6b7d759bc670
 src/vendor/pl_synth.js is the unmodified vanilla JavaScript engine.
 Instrument presets and parameter ordering are adapted from tracker.html.
+The PL_SYNTH Demo Arp and Lead presets come from tracks 1 and 2 of
+https://github.com/phoboslab/pl_synth/blob/03bf74cb6f953e6ecc2f527bc40f6b7d759bc670/example.html.
 Original engine attribution to Sonant (Jake Taylor / Ferris / Youth Uprising)
 is preserved in its source header. See licenses/pl_synth-MIT.txt.

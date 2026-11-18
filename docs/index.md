@@ -5,7 +5,7 @@ status: reference
 
 # Synth tracker
 
-`view-synth` is a Host-themed tracker using [PL_SYNTH by Dominic Szablewski](https://github.com/justgook/pl_synth). It provides 8 tracks, 32 rows per pattern, 9 patterns per track and 29 instrument controls. Styling and the View lifecycle come from GAMS, not the upstream tracker page.
+`view-synth` is a Host-themed tracker using [PL_SYNTH by Dominic Szablewski](https://github.com/justgook/pl_synth). It provides 8 tracks, 32 rows per pattern, 9 patterns per track and 30 instrument controls. Styling and the View lifecycle come from GAMS, not the upstream tracker page.
 
 ## Usage
 
@@ -30,7 +30,7 @@ Songs use the upstream array representation:
 [row_len, [[instrument, sequence, patterns], ...]]
 ```
 
-`row_len` is the number of audio samples per tracker row. Each track contains its 29-value instrument array, a sequence of pattern numbers (`0`–`9`) and nine 32-row note patterns. A zero note row is empty. Notes are displayed as names such as `C5` and `F#4`; JSON stores raw values `1`–`255`. `C5` is upstream note `147`. Sequences contain at most 64 steps per track. Rendering is limited to 120 seconds including delay tails and 50 million synthesized note samples, to bound memory and synchronous CPU work. Import/export preserves this format rather than adding a Project-specific wrapper. Import accepts strict JSON (up to 1 MiB), including compact arrays padded with `null`; JavaScript literals, C structs, legacy Sonant objects and share-link fragments are not supported. Import replaces the current song: export first. Work is retained during layout moves, but is not automatically saved to the Project.
+`row_len` is the number of audio samples per tracker row. Each track contains its instrument array, a sequence of pattern numbers (`0`–`9`) and nine 32-row note patterns. The first 29 instrument values match PL_SYNTH. The optional 30th value selects the view.synth guitar amp (`0` or omitted: Off, `1`: Rhythm, `2`: Lead). The amp is applied per track in preview, playback and WAV export; upstream PL_SYNTH does not apply it. A zero note row is empty. Notes are displayed as names such as `C5` and `F#4`; JSON stores raw values `1`–`255`. `C5` is upstream note `147`. Sequences contain at most 64 steps per track. Rendering is limited to 120 seconds including delay tails and 50 million synthesized note samples, to bound memory and synchronous CPU work. Import/export preserves this format rather than adding a Project-specific wrapper. Import accepts strict JSON (up to 1 MiB), including compact arrays padded with `null`; JavaScript literals, C structs, legacy Sonant objects and share-link fragments are not supported. Import replaces the current song: export first. Work is retained during layout moves, but is not automatically saved to the Project.
 
 ## Development and installation
 

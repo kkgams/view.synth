@@ -1,6 +1,6 @@
 # Synth
 
-A Host-themed [PL_SYNTH](https://github.com/justgook/pl_synth) tracker for [GAMS](https://github.com/kkgams/gams): 8 tracks, 32 rows per pattern, 9 patterns per track and 29 instrument controls. Enter notes with the piano keyboard, select row ranges, play patterns or songs, import/export JSON songs and export PCM WAV audio.
+A Host-themed [PL_SYNTH](https://github.com/justgook/pl_synth) tracker for [GAMS](https://github.com/kkgams/gams): 8 tracks, 32 rows per pattern, 9 patterns per track and 30 instrument controls. Enter notes with the piano keyboard, select row ranges, play patterns or songs, import/export JSON songs and export PCM WAV audio.
 
 | View | Local entry / package | Attribution |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Requires Make, Node.js 24, Python 3, curl, zip, unzip and tar; no package instal
 | `make validate-docs` / `make docs` | Validate / build `build.nosync/site/` |
 | `make clean` | Remove all of `build.nosync/`, `tools/` and `gams_modules/`, without ownership markers; refuse tracked files or symlinks in deletion paths before deleting anything. |
 
-Edit `src/vendor/pl_synth.js`, `src/model.mjs` and `src/views/view-synth.js`. Make concatenates them in that order, stripping model `export ` prefixes. Only the Host helper remains imported. The Project loads the assembled module, not source files individually.
+Make assembles the PL_SYNTH engine, `src/model.mjs`, `src/amp.mjs` and `src/views/view-synth.js` into one module with only Host imports. The Project loads the assembled module, not source files individually.
 
 First launch downloads pinned GAMS v3.2.0 and resolves pinned supporting Units. Existing tools are not updated implicitly; downloaded Host notices remain beside the app. Launch sets `GAMS_APP_CWD` and selects local `gams.json`.
 

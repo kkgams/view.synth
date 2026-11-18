@@ -145,7 +145,7 @@ test("instrument panels render every parameter once", () => {
         .sort((a, b) => a - b)
     assert.deepEqual(
         indices,
-        Array.from({ length: 29 }, (_, i) => i),
+        Array.from({ length: model.FIELDS.length }, (_, i) => i),
     )
     for (const title of ["OSC 1", "OSC 2", "ENV", "FX", "LFO", "Preset"])
         assert.ok(html.includes(`<th colspan="2" scope="col">${title}</th>`))
@@ -178,7 +178,7 @@ test("numeric instrument fields render bounded integer sliders while other contr
     }
     assert.doesNotMatch(html, /type="number"/)
     assert.equal((html.match(/type="checkbox"/g) || []).length, 4)
-    assert.equal((html.match(/<select data-instrument=/g) || []).length, 4)
+    assert.equal((html.match(/<select data-instrument=/g) || []).length, 5)
 })
 
 test("instrument slider changes update the selected track and retain strict value validation", () => {

@@ -613,14 +613,10 @@ export class ViewSynth extends HTMLElement {
         const track = this.song[1][this.track]
         if (mode === "note") {
             renderLength([this.song[0], [[track[0], [1], []]]])
-            return synth.sound([...track[0]], note, this.song[0])
+            return renderNote(synth, track[0], note, this.song[0])
         }
         const data = mode === "pattern" ? [this.song[0], [[track[0], [1], [track[2][this.pattern]]]]] : this.song
-        const renderData = renderSongData(data)
-        const rendered = synth.song(renderData)
-        if (mode !== "loop") return rendered
-        const frames = renderData[0] * 32 * Math.max(...renderData[1].map((track) => track[1].length))
-        return loopBuffer(audio, rendered, frames)
+        return renderArrangement(synth, audio, data, mode === "loop")
     }
 
     async play(mode, note) {
